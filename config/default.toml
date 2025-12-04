@@ -1,0 +1,17 @@
+[data]
+train_path = "../data/all/dataset.parquet"
+test_path = "../data/all/dataset.parquet" # Using full dataset for now as split isn't explicit in repo
+validation_path = "../data/all/dataset.parquet"
+sepsis_subset_path = "../data/seperated/seps_true.parquet"
+non_sepsis_subset_path = "../data/seperated/seps_false.parquet"
+
+[experiment]
+target_column = "SepsisLabel"
+patient_id_column = "Patient_ID"
+time_column = "ICULOS"
+test_size = 0.2
+random_seed = 42
+
+[causality]
+significance_threshold = 0.05
+max_features = 10
