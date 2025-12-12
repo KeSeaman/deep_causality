@@ -1,0 +1,9 @@
+marimo
+polars
+pyarrow
+matplotlib
+seaborn
+numpy
+modin[all]
+ray[default]
+scikit-learn

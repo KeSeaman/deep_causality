@@ -11,14 +11,13 @@ venv/
 ENV/
 env/
 
-# Data
-data/
+# Data files (top-level data directory only)
+/data/
 *.parquet
 *.csv
 
 # Logs
 *.log
-*.txt
 
 # IDE
 .vscode/

@@ -1,0 +1,27 @@
+[package]
+name = "deep_causality_py"
+version = "0.1.0"
+edition = "2021"
+description = "Python bindings for Deep Causality causal inference engine"
+license = "MIT"
+
+[lib]
+name = "deep_causality_py"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.20", features = ["extension-module"] }
+polars = { version = "0.36", features = ["lazy", "parquet", "ipc", "serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+
+# Note: For full functionality, this would link to the backend crate
+# For now, we implement a standalone version with core algorithms
+deep_causality = { git = "https://github.com/deepcausality-rs/deep_causality.git" }
+deep_causality_algorithms = { git = "https://github.com/deepcausality-rs/deep_causality.git" }
+deep_causality_tensor = { git = "https://github.com/deepcausality-rs/deep_causality.git" }
+
+[profile.release]
+lto = true
+codegen-units = 1
