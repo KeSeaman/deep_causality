@@ -122,15 +122,9 @@ cd backend && cargo run --release -- --surd-analysis
 cd backend && cargo run --release -- --export-graph ../notes/causal_graph.dot
 ```
 
-### 4. Real-Time Inference Mode
 
-```bash
-# Stream JSON vital updates for continuous monitoring
-echo '{"patient_id":"P001","timestamp":1000,"vitals":{"HR":95,"MAP":65},"labs":{}}' | \
-  cargo run --release -- --realtime
-```
 
-### 5. Python Bindings (Coming Soon)
+### 4. Python Bindings
 
 ```bash
 cd python
@@ -142,7 +136,7 @@ import deep_causality
 features = deep_causality.run_mrmr_polars(df, target="SepsisLabel")
 ```
 
-### 6. Analyze Results
+### 5. Analyze Results
 
 ```bash
 source .venv/bin/activate
@@ -265,7 +259,6 @@ Deep_Causality/
 │       ├── causality/       # mRMR & SURD algorithms
 │       ├── context/         # Dynamic patient hypergraph
 │       ├── ethos/           # Effect Ethos guardrails ⭐
-│       ├── inference/       # Real-time streaming ⭐
 │       ├── visualization/   # Graphviz export ⭐
 │       ├── config/          # TOML config loader
 │       ├── data/            # Parquet/CSV loading
@@ -298,9 +291,6 @@ Deep_Causality/
 | ✅ | **Hypergraph visualization (Graphviz)** | Complete |
 | ✅ | **Python bindings (PyO3)** | Complete |
 | ✅ | **Counterfactual explainer (Effect Ethos)** | Complete |
-| ✅ | **Real-time inference mode** | Complete |
-| 📋 | Web dashboard | Planned |
-| 📋 | Docker deployment | Planned |
 
 ---
 
@@ -314,7 +304,6 @@ cargo run --release -- [OPTIONS]
   -c, --config <PATH>      Config file path [default: ../config/default.toml]
       --surd-analysis      Run SURD dual analysis
       --export-graph <PATH> Export causal graph to DOT file  
-      --realtime           Real-time inference mode (stdin JSON)
       --export-json <PATH> Export results to JSON
   -h, --help               Print help
   -V, --version            Print version

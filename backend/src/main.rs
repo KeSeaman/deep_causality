@@ -5,7 +5,6 @@ mod context;
 mod utils;
 mod ethos;
 mod visualization;
-mod inference;
 
 use anyhow::Result;
 use clap::Parser;
@@ -14,7 +13,6 @@ use crate::config::Config;
 use crate::data::DataLoader;
 use crate::causality::CausalDiscovery;
 use crate::visualization::CausalGraph;
-use crate::inference::{StreamingInference, StreamingConfig, VitalUpdate};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Deep Causality ICU Sepsis Causal Discovery Engine")]
@@ -31,10 +29,6 @@ struct Args {
     #[arg(long)]
     export_graph: Option<String>,
 
-    /// Run in real-time inference mode (reads JSON lines from stdin)
-    #[arg(long, default_value = "false")]
-    realtime: bool,
-
     /// Export results to JSON file
     #[arg(long)]
     export_json: Option<String>,
@@ -50,11 +44,6 @@ async fn main() -> Result<()> {
     info!("========================================");
     
     let config = Config::load(&args.config)?;
-
-    // Check for real-time mode first
-    if args.realtime {
-        return run_realtime_mode(&config).await;
-    }
 
     // 1. Load Main Dataset
     info!("Loading training data from {}", config.data.train_path);
@@ -209,65 +198,6 @@ fn run_mrmr_comparison(sepsis_df: &polars::prelude::DataFrame, non_sepsis_df: &p
     });
     std::fs::write("../notes/mrmr_comparison.json", serde_json::to_string_pretty(&comparison)?)?;
     info!("Comparison results saved to notes/mrmr_comparison.json");
-
-    Ok(())
-}
-
-async fn run_realtime_mode(config: &Config) -> Result<()> {
-    info!("\n--- Real-Time Inference Mode ---");
-    info!("Reading JSON lines from stdin. Press Ctrl+C to stop.\n");
-
-    // Load feature weights from mRMR on training data
-    let feature_weights = match DataLoader::load_parquet(&config.data.train_path) {
-        Ok(df) => {
-            CausalDiscovery::run_mrmr(&df, &config.experiment.target_column, config.causality.max_features)
-                .unwrap_or_default()
-        },
-        Err(_) => vec![
-            ("ICULOS".to_string(), 1.0),
-            ("HR".to_string(), 0.8),
-            ("MAP".to_string(), 0.7),
-            ("Lactate".to_string(), 0.6),
-        ],
-    };
-
-    let streaming_config = StreamingConfig::default();
-    let mut engine = StreamingInference::new(streaming_config);
-    engine.set_feature_weights(feature_weights);
-
-    // Read JSON lines from stdin
-    use std::io::BufRead;
-    let stdin = std::io::stdin();
-    let reader = stdin.lock();
-
-    for line in reader.lines() {
-        let line = line?;
-        if line.trim().is_empty() {
-            continue;
-        }
-
-        match serde_json::from_str::<VitalUpdate>(&line) {
-            Ok(update) => {
-                let patient_id = update.patient_id.clone();
-                match engine.process_update(update) {
-                    Ok((result, alerts)) => {
-                        if let Some(r) = result {
-                            println!("{}", serde_json::to_string(&r)?);
-                        }
-                        for alert in alerts {
-                            eprintln!("ALERT: {}", serde_json::to_string(&alert)?);
-                        }
-                    },
-                    Err(e) => {
-                        error!("Error processing update for {}: {}", patient_id, e);
-                    }
-                }
-            },
-            Err(e) => {
-                warn!("Failed to parse JSON: {}", e);
-            }
-        }
-    }
 
     Ok(())
 }
