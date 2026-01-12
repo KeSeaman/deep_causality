@@ -30,6 +30,8 @@ Most ML models on imbalanced medical data (7.27% sepsis prevalence) fail because
 | Static feature vector | Dynamic patient context (time-indexed) |
 | Optimizes for accuracy | Optimizes for **actionable insight** |
 
+> 📖 **For full research documentation**, see [`notes/methodology.md`](notes/methodology.md) — includes detailed SURD algorithm, causal graph architecture, and validation approach.
+
 ---
 
 ## 💡 For Data Scientists
@@ -274,6 +276,7 @@ Deep_Causality/
 ├── config/                  # Experiment configuration
 ├── scripts/                 # Setup & automation
 ├── notes/                   # Results & documentation
+│   └── methodology.md       # 📖 Detailed methodology & research design
 ├── Makefile
 └── README.md
 ```
