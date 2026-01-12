@@ -148,45 +148,15 @@ marimo edit notebooks/results_analysis.py  # Visualize causal drivers
 
 ---
 
-## 📊 Results
+## 📊 Results Summary
 
-### mRMR Feature Selection
+Our causal analysis revealed distinct biomarkers for sepsis that traditional correlation-based methods miss.
 
-The mRMR causal discovery algorithm identified the **top 10 sepsis drivers**:
+-   **Top Driver**: `ICULOS` (Length of Stay) followed by `HospAdmTime`.
+-   **Sepsis Signature**: `Lactate`, `Bilirubin_direct`, and `FiO2` emerged as unique causal drivers for sepsis, distinct from general ICU sickness.
+-   **Uniqueness**: The sepsis feature set contained **71% more unique information** than the non-sepsis set, validating the "Context-First" hypothesis.
 
-| Rank | Feature | Score | Clinical Interpretation |
-|------|---------|-------|-------------------------|
-| 1 | **ICULOS** | 1.0000 | ICU Length of Stay—cumulative risk exposure |
-| 2 | **HospAdmTime** | 0.5085 | Time between hospital and ICU admission |
-| 3 | **Unit2** (MICU) | 0.3542 | Medical ICU indicator |
-| 4 | **Unit1** (SICU) | 0.2710 | Surgical ICU indicator |
-| 5 | **Gender** | 0.2149 | Demographic factor |
-| 6 | **Age** | 0.1783 | Age-related risk |
-| 7 | **Platelets** | 0.1523 | 🩸 Coagulation dysfunction marker |
-| 8 | **Fibrinogen** | 0.1353 | 🩸 Coagulation cascade indicator |
-| 9 | **WBC** | 0.1196 | 🔥 White Blood Cell count (inflammation) |
-| 10 | **HR** | 0.1089 | Heart Rate variability |
-
-> **Key Insight**: The algorithm correctly prioritizes **length of stay**, **admission context**, and **coagulation/inflammation markers**—aligning with clinical expectations for sepsis pathophysiology.
-
-### SURD Dual Analysis (Sepsis vs Non-Sepsis)
-
-Running `--surd-analysis` decomposes causal information into **Redundant**, **Unique**, and **Synergistic** components:
-
-| Metric | Sepsis Subset | Non-Sepsis Subset | Interpretation |
-|--------|---------------|-------------------|----------------|
-| **Redundant Info** | 0.4231 bits | 0.5892 bits | Shared "ICU sickness" noise—higher in non-sepsis |
-| **Unique Info** | 0.3156 bits | 0.1847 bits | Sepsis-specific signal—**71% stronger** in sepsis |
-| **Synergistic Info** | 0.1823 bits | 0.0912 bits | Combined biomarker effects |
-| **Total Info** | 0.9210 bits | 0.8651 bits | Overall predictive power |
-
-**Key Findings:**
-
-- **Sepsis Specificity Score**: 0.1309 (higher = more distinguishable)
-- **Disjoint Drivers** (Sepsis-only): `Lactate`, `Bilirubin_direct`, `FiO2`
-- **Shared Drivers**: `ICULOS`, `HR`, `MAP`, `Platelets`, `WBC`
-
-> **Clinical Insight**: The unique information is **71% higher** in the sepsis subset, confirming that sepsis has distinct causal biomarkers beyond general ICU illness. Lactate and direct bilirubin emerge as sepsis-specific drivers not present in the non-sepsis feature set.
+> 📖 **Full Analysis**: For detailed mRMR rankings, SURD bit-score tables, and causal graph visualizations, see [`notes/methodology.md`](notes/methodology.md).
 
 
 ---
@@ -281,21 +251,6 @@ Deep_Causality/
 └── README.md
 ```
 
----
-
-## 🗺️ Roadmap
-
-| Phase | Feature | Status |
-|-------|---------|--------|
-| ✅ | Rust core engine | Complete |
-| ✅ | mRMR feature selection | Complete |
-| ✅ | Marimo visualization | Complete |
-| ✅ | **SURD dual analysis** | Complete |
-| ✅ | **Hypergraph visualization (Graphviz)** | Complete |
-| ✅ | **Python bindings (PyO3)** | Complete |
-| ✅ | **Counterfactual explainer (Effect Ethos)** | Complete |
-
----
 
 ## 🔧 CLI Reference
 

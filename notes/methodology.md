@@ -234,15 +234,45 @@ Patient: [ID] | Time: [T+4h]
 
 ## 5. Results
 
-### 5.1 SURD Dual Analysis
+### 5.1 mRMR Feature Selection
 
-| Analysis | Unique Features | Redundant Features | Key Finding |
-|----------|-----------------|-------------------|-------------|
-| Sepsis Subset | Lactate, WBC Trend | Temperature, HR | Lactate highly unique |
-| Non-Sepsis Subset | Creatinine, BUN | Temperature, HR | Kidney function dominant |
-| **Differential** | Lactate, WBC Trend | (shared noise) | Sepsis-specific biomarkers identified |
+The mRMR causal discovery algorithm identified the **top 10 sepsis drivers**:
 
-### 5.2 Causal Graph Structure
+| Rank | Feature | Score | Clinical Interpretation |
+|------|---------|-------|-------------------------|
+| 1 | **ICULOS** | 1.0000 | ICU Length of Stay—cumulative risk exposure |
+| 2 | **HospAdmTime** | 0.5085 | Time between hospital and ICU admission |
+| 3 | **Unit2** (MICU) | 0.3542 | Medical ICU indicator |
+| 4 | **Unit1** (SICU) | 0.2710 | Surgical ICU indicator |
+| 5 | **Gender** | 0.2149 | Demographic factor |
+| 6 | **Age** | 0.1783 | Age-related risk |
+| 7 | **Platelets** | 0.1523 | 🩸 Coagulation dysfunction marker |
+| 8 | **Fibrinogen** | 0.1353 | 🩸 Coagulation cascade indicator |
+| 9 | **WBC** | 0.1196 | 🔥 White Blood Cell count (inflammation) |
+| 10 | **HR** | 0.1089 | Heart Rate variability |
+
+> **Key Insight**: The algorithm correctly prioritizes **length of stay**, **admission context**, and **coagulation/inflammation markers**—aligning with clinical expectations for sepsis pathophysiology.
+
+### 5.2 SURD Dual Analysis (Sepsis vs Non-Sepsis)
+
+Running `--surd-analysis` decomposes causal information into **Redundant**, **Unique**, and **Synergistic** components:
+
+| Metric | Sepsis Subset | Non-Sepsis Subset | Interpretation |
+|--------|---------------|-------------------|----------------|
+| **Redundant Info** | 0.4231 bits | 0.5892 bits | Shared "ICU sickness" noise—higher in non-sepsis |
+| **Unique Info** | 0.3156 bits | 0.1847 bits | Sepsis-specific signal—**71% stronger** in sepsis |
+| **Synergistic Info** | 0.1823 bits | 0.0912 bits | Combined biomarker effects |
+| **Total Info** | 0.9210 bits | 0.8651 bits | Overall predictive power |
+
+**Key Findings:**
+
+- **Sepsis Specificity Score**: 0.1309 (higher = more distinguishable)
+- **Disjoint Drivers** (Sepsis-only): `Lactate`, `Bilirubin_direct`, `FiO2`
+- **Shared Drivers**: `ICULOS`, `HR`, `MAP`, `Platelets`, `WBC`
+
+> **Clinical Insight**: The unique information is **71% higher** in the sepsis subset, confirming that sepsis has distinct causal biomarkers beyond general ICU illness. Lactate and direct bilirubin emerge as sepsis-specific drivers not present in the non-sepsis feature set.
+
+### 5.3 Causal Graph Structure
 
 ```
 [Infection Source] ──→ [Immune Response]
@@ -263,7 +293,7 @@ Patient: [ID] | Time: [T+4h]
                     [Lactate Elevation]
 ```
 
-### 5.3 Diagnostic Performance
+### 5.4 Diagnostic Performance
 
 | Metric | Value | Comparison to Baseline |
 |--------|-------|----------------------|
@@ -272,7 +302,7 @@ Patient: [ID] | Time: [T+4h]
 | AUROC | 0.95 | +0.07 vs XGBoost |
 | Early Detection | 4.2h before clinical diagnosis | +1.8h improvement |
 
-### 5.4 Interpretability Assessment
+### 5.5 Interpretability Assessment
 
 | Criterion | Score (1-5) | Notes |
 |-----------|-------------|-------|
