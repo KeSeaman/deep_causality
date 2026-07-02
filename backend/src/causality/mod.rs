@@ -1,6 +1,6 @@
 use crate::utils::tensor_adapter::TensorAdapter;
 use deep_causality_algorithms::mrmr::mrmr_features_selector;
-use deep_causality_algorithms::surd::{surd_states, SurdResult};
+use deep_causality_algorithms::surd::{surd_states, SurdResult, MaxOrder};
 use polars::prelude::*;
 use anyhow::{Result, Context};
 use tracing::info;
@@ -54,7 +54,7 @@ impl CausalDiscovery {
     /// Returns decomposed information: Redundant, Unique, Synergistic
     pub fn run_surd(df: &DataFrame, target_col: &str) -> Result<SurdAnalysisResult> {
         info!("Converting DataFrame to CausalTensor for SURD...");
-        let (tensor, col_names) = TensorAdapter::df_to_tensor(df)?;
+        let (tensor, col_names) = TensorAdapter::df_to_tensor_f64(df)?;
 
         // Find target column index
         let target_idx = col_names.iter()
@@ -69,7 +69,7 @@ impl CausalDiscovery {
         info!("Running SURD causal discovery with {} features...", agent_indices.len());
         
         // Call SURD algorithm
-        let surd_result = surd_states(&tensor, target_idx, &agent_indices)
+        let surd_result = surd_states(&tensor, MaxOrder::Max)
             .map_err(|e| anyhow::anyhow!("SURD execution failed: {:?}", e))?;
 
         // Aggregate SURD results

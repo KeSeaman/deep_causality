@@ -29,6 +29,30 @@ impl TensorAdapter {
 
         Ok((tensor, column_names))
     }
+
+    pub fn df_to_tensor_f64(df: &DataFrame) -> Result<(CausalTensor<f64>, Vec<String>)> {
+        let (height, width) = df.shape();
+        let mut flat_data: Vec<f64> = Vec::with_capacity(height * width);
+        let mut column_names: Vec<String> = Vec::with_capacity(width);
+
+        for col_name in df.get_column_names() {
+            let series = df.column(col_name)?;
+            column_names.push(col_name.to_string());
+
+            // Cast to Float64 and handle nulls
+            let ca = series.cast(&DataType::Float64)?;
+            let f64_ca = ca.f64()?;
+
+            for opt_val in f64_ca.into_iter() {
+                flat_data.push(opt_val.unwrap_or(0.0));
+            }
+        }
+
+        let tensor = CausalTensor::new(flat_data, vec![height, width])
+            .context("Failed to create CausalTensor f64")?;
+
+        Ok((tensor, column_names))
+    }
 }
 
 #[cfg(test)]
