@@ -2,13 +2,13 @@
 //!
 //! Follows the reference SURD algorithm of Martínez-Sánchez et al. (2024) and the structure of
 //! `deep_causality_algorithms::surd::surd_states`. We do not call the library function: at commit
-//! 6cc7f6f it divides p(T, S_j) by p(T) without aligning the target axis, so it fails with
-//! `ShapeMismatch` unless every variable has the same number of states, panics on zero cells, and
-//! where it does run disagrees with the reference implementation (scripts/surd_reference.py) by
-//! 2e-3 to 9e-3 bits, including negative redundancies. The library also skips zero increments
-//! before updating the redundant set, which files unique information as redundant; the reference
-//! code does not. This port agrees with the reference to within 5e-13 bits
-//! (see `tests::dump_for_reference`).
+//! 6cc7f6f it returns wrong values when p(T) is not uniform (single source, p(T) = (0.7, 0.3):
+//! 0.110 bits reported vs 0.192 bits mutual information), files unique information as redundant
+//! when another source has zero specific information (it skips zero increments before updating
+//! the redundant set), fails with `ShapeMismatch` when target and source state counts differ, and
+//! panics when a source state never occurs. This port agrees with a numpy transcription of the
+//! reference code (scripts/surd_reference.py) to within 5e-13 bits (see
+//! `tests::dump_for_reference`).
 
 use std::collections::BTreeMap;
 

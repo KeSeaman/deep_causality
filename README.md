@@ -33,6 +33,8 @@ Hourly labels are positive from 6 hours before clinical onset, so hourly AUROC m
 - **Alerting** (threshold set for 80% patient specificity on hospital A validation patients): the causal-driver detector flags 34% of septic patients before onset, with 90% specificity and 18% PPV on hospital B. The median lead time of 28 hours (IQR 5–71) is long enough that many early alerts are likely not sepsis-specific. The clinical score flags 56% before onset, but at 69% specificity and 10% PPV.
 - **SURD on hospital A**: the top five drivers (respiratory rate, bicarbonate, temperature, haemoglobin, heart rate) jointly carry 0.0061 of the label's 0.151 bits (4%); 0.0045 bits of that is synergistic and only temperature has any unique information. A single hour's snapshot says little about imminent sepsis; what signal there is lives in combinations.
 
+![SURD decomposition of the top five drivers](results/surd_decomposition.svg)
+
 ### Guardrails
 
 | Reading of the rules | Hours allowed | Labelled-sepsis hours allowed | AUROC on allowed hours | AUROC on blocked hours |
@@ -54,11 +56,11 @@ make test      # Rust unit tests + Python pipeline tests
 marimo edit notebooks/results_analysis.py
 ```
 
-Outputs: `results/causal_discovery.json`, `results/detection_results.json`, `results/example_reports.md`, `results/detection_auroc.png`.
+Outputs: `results/causal_discovery.json`, `results/detection_results.json`, `results/example_reports.md`, `results/detection_auroc.png`, `results/surd_decomposition.svg`.
 
 ## Implementation notes
 
-- **DeepCausality's mRMR** does the feature selection. Its SURD function (`surd_states`, commit 6cc7f6f) is not used: it misaligns the target axis when broadcasting, panics on zero cells, and disagrees with the reference SURD implementation by 2e-3 to 9e-3 bits where it runs. `backend/src/causality/surd_aggregate.rs` is a port of the aggregate decomposition, checked against exact cases (XOR = pure synergy, duplicated source = pure redundancy, independent noise = no information) and against a numpy transcription of the reference code ([`scripts/surd_reference.py`](scripts/surd_reference.py)) to within 5e-13 bits.
+- **DeepCausality's mRMR** does the feature selection. Its SURD function (`surd_states`, commit 6cc7f6f) is not used: it returns wrong values when the target distribution is not uniform (for a single source with p(T) = (0.7, 0.3) it reports 0.110 bits where the mutual information is 0.192), files unique information as redundant when another source carries zero specific information, fails with `ShapeMismatch` when target and source state counts differ, and panics when a source state never occurs. `backend/src/causality/surd_aggregate.rs` is a port of the aggregate decomposition, checked against exact cases (XOR = pure synergy, duplicated source = pure redundancy, independent noise = no information) and against a numpy transcription of the reference code ([`scripts/surd_reference.py`](scripts/surd_reference.py)) to within 5e-13 bits.
 - LightGBM trains on CPU: on the Intel Arc iGPU its OpenCL learner was about 2× slower for this workload.
 - The guardrail rules are implemented and unit-tested in Rust; the evaluation applies the same rules in Python (`ethos_allowed`), because the pipeline's modelling stage is Python.
 
@@ -77,7 +79,7 @@ Full design and rationale: [`notes/methodology.md`](notes/methodology.md).
 backend/src/causality/   mRMR (DeepCausality) and SURD decomposition
 backend/src/ethos/       Effect Ethos guardrail rules
 backend/src/main.rs      Causal discovery CLI -> results/causal_discovery.json
-scripts/                 prepare_data.py, evaluate_detection.py, plot_results.py, surd_reference.py
+scripts/                 prepare_data.py, evaluate_detection.py, plot_results.py, plot_surd.py, surd_reference.py
 tests/                   Python pipeline tests
 notebooks/               eda.py, results_analysis.py (marimo)
 config/default.toml      Candidates, mRMR size, SURD sources and bins

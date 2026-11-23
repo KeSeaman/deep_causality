@@ -14,6 +14,8 @@ discover:
 
 evaluate:
 	$(RUN) $(PY) scripts/evaluate_detection.py --split data/split --discovery results/causal_discovery.json --out results
+	$(PY) scripts/plot_results.py
+	$(PY) scripts/plot_surd.py
 
 test: test-rust test-python
 
