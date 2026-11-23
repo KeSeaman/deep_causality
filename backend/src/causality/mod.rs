@@ -1,149 +1,133 @@
+//! Causal discovery on the training hospital: DeepCausality's mRMR for feature selection and a
+//! SURD information decomposition of what the top drivers say about the sepsis label.
+
+pub mod surd_aggregate;
+
 use crate::utils::tensor_adapter::TensorAdapter;
+use anyhow::{Context, Result};
 use deep_causality_algorithms::mrmr::mrmr_features_selector;
-use deep_causality_algorithms::surd::{surd_states, SurdResult, MaxOrder};
 use polars::prelude::*;
-use anyhow::{Result, Context};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use surd_aggregate::surd_aggregate;
 use tracing::info;
-use serde::{Serialize, Deserialize};
 
 pub struct CausalDiscovery;
 
-/// Result from SURD analysis containing decomposed causal information
+/// A feature subset and the information (bits) attributed to it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SurdAnalysisResult {
-    pub redundant_info: f64,
-    pub unique_info: f64,
-    pub synergistic_info: f64,
-    pub total_info: f64,
+pub struct InfoTerm {
+    pub features: Vec<String>,
+    pub bits: f64,
 }
 
-/// Result from dual SURD analysis comparing Sepsis vs Non-Sepsis
+/// SURD decomposition of what a set of source features tells us about the target.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SurdDualResult {
-    pub sepsis_result: SurdAnalysisResult,
-    pub non_sepsis_result: SurdAnalysisResult,
-    pub disjoint_drivers: Vec<String>,       // Unique to sepsis
-    pub shared_drivers: Vec<String>,          // Present in both
-    pub sepsis_specific_score: f64,           // Measure of how different sepsis drivers are
+pub struct SurdSummary {
+    pub sources: Vec<String>,
+    pub bins_per_source: usize,
+    pub rows: usize,
+    pub target_entropy_bits: f64,
+    /// Mutual information I(target; all sources).
+    pub joint_mutual_info_bits: f64,
+    /// Information only one source provides (SURD "unique").
+    pub unique: Vec<InfoTerm>,
+    /// Information several sources provide in common (SURD "redundant", order >= 2).
+    pub redundant: Vec<InfoTerm>,
+    /// Information that appears only when sources are combined.
+    pub synergistic: Vec<InfoTerm>,
+    pub total_unique_bits: f64,
+    pub total_redundant_bits: f64,
+    pub total_synergistic_bits: f64,
+    /// H(target | all sources) / H(target): the share of label uncertainty the sources leave.
+    pub info_leak_fraction: f64,
 }
 
 impl CausalDiscovery {
-    /// Run mRMR feature selection algorithm
-    pub fn run_mrmr(df: &DataFrame, target_col: &str, max_features: usize) -> Result<Vec<(String, f64)>> {
-        info!("Converting DataFrame to CausalTensor for mRMR...");
-        let (tensor, col_names) = TensorAdapter::df_to_tensor(df)?;
-        
-        // Find target column index
-        let target_idx = col_names.iter()
-            .position(|n| n == target_col)
-            .context(format!("Target column {} not found", target_col))?;
+    /// mRMR (FCQ variant) over `candidates`, returning (feature, normalised score) in selection order.
+    pub fn run_mrmr(df: &DataFrame, target_col: &str, candidates: &[String], k: usize) -> Result<Vec<(String, f64)>> {
+        let mut cols: Vec<&str> = candidates.iter().map(String::as_str).collect();
+        cols.push(target_col);
+        let sub = df.select(cols).context("Selecting mRMR columns")?;
+        let (tensor, names) = TensorAdapter::df_to_tensor(&sub)?;
+        let target_idx = names.len() - 1;
 
-        info!("Running mRMR feature selection...");
-        let selected_features = mrmr_features_selector(&tensor, max_features, target_idx)
-            .map_err(|e| anyhow::anyhow!("mRMR execution failed: {:?}", e))?;
-
-        // Map indices back to names
-        let result: Vec<(String, f64)> = selected_features.into_iter()
-            .map(|(idx, score)| (col_names[idx].clone(), score))
-            .collect();
-
-        Ok(result)
+        info!("mRMR over {} candidates, {} rows", candidates.len(), sub.height());
+        let selected = mrmr_features_selector(&tensor, k, target_idx).map_err(|e| anyhow::anyhow!("mRMR failed: {:?}", e))?;
+        Ok(selected.into_iter().map(|(i, s)| (names[i].clone(), s)).collect())
     }
 
-    /// Run SURD (Synergistic Unique Redundant Degree) analysis
-    /// Returns decomposed information: Redundant, Unique, Synergistic
-    pub fn run_surd(df: &DataFrame, target_col: &str) -> Result<SurdAnalysisResult> {
-        info!("Converting DataFrame to CausalTensor for SURD...");
-        let (tensor, col_names) = TensorAdapter::df_to_tensor_f64(df)?;
-
-        // Find target column index
-        let target_idx = col_names.iter()
-            .position(|n| n == target_col)
-            .context(format!("Target column {} not found", target_col))?;
-
-        // Get feature indices (all columns except target)
-        let agent_indices: Vec<usize> = (0..col_names.len())
-            .filter(|&i| i != target_idx)
+    /// SURD on `sources` -> binary `target_col`.
+    ///
+    /// Each source is cut into `bins` quantile bins (edges from this DataFrame) plus one extra
+    /// state for "not yet measured", because in ICU data missingness carries information.
+    pub fn run_surd(df: &DataFrame, target_col: &str, sources: &[String], bins: usize) -> Result<SurdSummary> {
+        let states = bins + 1;
+        let target: Vec<usize> = df
+            .column(target_col)?
+            .cast(&DataType::Float64)?
+            .f64()?
+            .into_iter()
+            .map(|v| usize::from(v.unwrap_or(0.0) > 0.5))
             .collect();
+        let binned: Vec<Vec<usize>> = sources.iter().map(|s| quantile_bin(df.column(s)?, bins)).collect::<Result<_>>()?;
 
-        info!("Running SURD causal discovery with {} features...", agent_indices.len());
-        
-        // Call SURD algorithm
-        let surd_result = surd_states(&tensor, MaxOrder::Max)
-            .map_err(|e| anyhow::anyhow!("SURD execution failed: {:?}", e))?;
+        // Joint histogram, row-major over [target, source_1, ..., source_k].
+        let shape: Vec<usize> = std::iter::once(2).chain(std::iter::repeat(states).take(sources.len())).collect();
+        let mut counts = vec![0f64; shape.iter().product()];
+        for row in 0..target.len() {
+            let idx = binned.iter().fold(target[row], |acc, b| acc * states + b[row]);
+            counts[idx] += 1.0;
+        }
+        info!("SURD on {} sources x {} states ({} cells, {} rows)", sources.len(), states, counts.len(), target.len());
+        let r = surd_aggregate(&counts, &shape);
 
-        // Aggregate SURD results
-        let (redundant, unique, synergistic) = Self::aggregate_surd_result(&surd_result);
-        let total = redundant + unique + synergistic;
+        // Sources are numbered from 1 (index 0 is the target).
+        let terms = |m: &BTreeMap<Vec<usize>, f64>, keep: &dyn Fn(usize) -> bool| {
+            let mut v: Vec<InfoTerm> = m
+                .iter()
+                .filter(|(k, _)| keep(k.len()))
+                .map(|(k, &bits)| InfoTerm { features: k.iter().map(|&i| sources[i - 1].clone()).collect(), bits })
+                .collect();
+            v.sort_by(|a, b| b.bits.total_cmp(&a.bits));
+            v
+        };
+        let unique = terms(&r.redundant, &|n| n == 1);
+        let redundant = terms(&r.redundant, &|n| n > 1);
+        let synergistic = terms(&r.synergistic, &|_| true);
+        let total = |v: &[InfoTerm]| v.iter().map(|t| t.bits).sum::<f64>();
+        let all: Vec<usize> = (1..=sources.len()).collect();
 
-        Ok(SurdAnalysisResult {
-            redundant_info: redundant,
-            unique_info: unique,
-            synergistic_info: synergistic,
-            total_info: total,
+        Ok(SurdSummary {
+            sources: sources.to_vec(),
+            bins_per_source: bins,
+            rows: target.len(),
+            target_entropy_bits: r.target_entropy_bits,
+            joint_mutual_info_bits: r.mutual_info.get(&all).copied().unwrap_or(0.0),
+            total_unique_bits: total(&unique),
+            total_redundant_bits: total(&redundant),
+            total_synergistic_bits: total(&synergistic),
+            unique,
+            redundant,
+            synergistic,
+            info_leak_fraction: r.info_leak_fraction,
         })
     }
+}
 
-    /// Run dual SURD analysis: compare Sepsis vs Non-Sepsis subsets
-    pub fn run_surd_dual(
-        sepsis_df: &DataFrame, 
-        non_sepsis_df: &DataFrame, 
-        target_col: &str
-    ) -> Result<SurdDualResult> {
-        info!("=== SURD Dual Analysis: Sepsis vs Non-Sepsis ===");
-        
-        // Analyze Sepsis subset
-        info!("Analyzing Sepsis subset ({} rows)...", sepsis_df.height());
-        let sepsis_result = Self::run_surd(sepsis_df, target_col)?;
-        
-        // Analyze Non-Sepsis subset  
-        info!("Analyzing Non-Sepsis subset ({} rows)...", non_sepsis_df.height());
-        let non_sepsis_result = Self::run_surd(non_sepsis_df, target_col)?;
-
-        // Run mRMR on both to identify feature rankings
-        let sepsis_features = Self::run_mrmr(sepsis_df, target_col, 15)?;
-        let non_sepsis_features = Self::run_mrmr(non_sepsis_df, target_col, 15)?;
-
-        // Find disjoint (sepsis-only) and shared drivers
-        let sepsis_names: std::collections::HashSet<_> = sepsis_features.iter()
-            .map(|(name, _)| name.clone())
-            .collect();
-        let non_sepsis_names: std::collections::HashSet<_> = non_sepsis_features.iter()
-            .map(|(name, _)| name.clone())
-            .collect();
-
-        let disjoint_drivers: Vec<String> = sepsis_names.difference(&non_sepsis_names)
-            .cloned()
-            .collect();
-        let shared_drivers: Vec<String> = sepsis_names.intersection(&non_sepsis_names)
-            .cloned()
-            .collect();
-
-        // Calculate sepsis specificity score (unique/total ratio difference)
-        let sepsis_unique_ratio = if sepsis_result.total_info > 0.0 {
-            sepsis_result.unique_info / sepsis_result.total_info
-        } else { 0.0 };
-        let non_sepsis_unique_ratio = if non_sepsis_result.total_info > 0.0 {
-            non_sepsis_result.unique_info / non_sepsis_result.total_info
-        } else { 0.0 };
-        let sepsis_specific_score = (sepsis_unique_ratio - non_sepsis_unique_ratio).abs();
-
-        Ok(SurdDualResult {
-            sepsis_result,
-            non_sepsis_result,
-            disjoint_drivers,
-            shared_drivers,
-            sepsis_specific_score,
+/// Quantile bins 0..bins-1 for observed values; `bins` for missing.
+fn quantile_bin(col: &Series, bins: usize) -> Result<Vec<usize>> {
+    let values: Vec<Option<f64>> = col.cast(&DataType::Float64)?.f64()?.into_iter().collect();
+    let mut observed: Vec<f64> = values.iter().flatten().copied().filter(|v| v.is_finite()).collect();
+    observed.sort_by(f64::total_cmp);
+    let edges: Vec<f64> = (1..bins).map(|q| observed.get(q * observed.len() / bins).copied().unwrap_or(f64::INFINITY)).collect();
+    Ok(values
+        .iter()
+        .map(|v| match v {
+            Some(x) if x.is_finite() => edges.iter().filter(|&&e| *x >= e).count(),
+            _ => bins,
         })
-    }
-
-    /// Aggregate SURD result into (Redundant, Unique, Synergistic) totals
-    fn aggregate_surd_result<T>(result: &SurdResult<T>) -> (f64, f64, f64) {
-        let redundant: f64 = result.redundant_info().values().sum();
-        let unique: f64 = result.mutual_info().values().sum(); // mutual_info represents unique contribution
-        let synergistic: f64 = result.synergistic_info().values().sum();
-        (redundant, unique, synergistic)
-    }
+        .collect())
 }
 
 #[cfg(test)]
@@ -151,14 +135,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_surd_analysis_result_serialization() {
-        let result = SurdAnalysisResult {
-            redundant_info: 0.5,
-            unique_info: 0.3,
-            synergistic_info: 0.2,
-            total_info: 1.0,
-        };
-        let json = serde_json::to_string(&result).unwrap();
-        assert!(json.contains("redundant_info"));
+    fn test_quantile_bin_with_missing_state() -> Result<()> {
+        let s = Series::new("x", &[Some(1.0), Some(2.0), Some(3.0), Some(4.0), None, Some(5.0)]);
+        let b = quantile_bin(&s, 2)?;
+        assert_eq!(b[4], 2, "missing gets its own state");
+        assert!(b[0] < b[5], "low and high values land in different bins");
+        Ok(())
+    }
+
+    #[test]
+    fn test_surd_finds_the_informative_source() -> Result<()> {
+        // "driver" determines the label; "noise" does not.
+        let n = 4000;
+        let driver: Vec<f64> = (0..n).map(|i| (i % 4) as f64).collect();
+        let noise: Vec<f64> = (0..n).map(|i| ((i * 7919) % 13) as f64).collect();
+        let label: Vec<f64> = driver.iter().map(|&d| if d >= 2.0 { 1.0 } else { 0.0 }).collect();
+        let df = df!["driver" => driver, "noise" => noise, "label" => label]?;
+
+        let s = CausalDiscovery::run_surd(&df, "label", &["driver".into(), "noise".into()], 2)?;
+        let bits = |f: &str| s.unique.iter().find(|t| t.features == vec![f.to_string()]).map_or(0.0, |t| t.bits);
+        assert!(bits("driver") > 0.9, "driver should carry ~1 bit, got {}; {:?}", bits("driver"), s);
+        assert!(bits("noise") < 0.05, "noise should carry ~0 bits, got {}", bits("noise"));
+        Ok(())
     }
 }

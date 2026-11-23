@@ -1,17 +1,20 @@
+# Inputs are produced by scripts/prepare_data.py (hospital A = train, hospital B = test,
+# last-known values carried forward within each ICU stay).
 [data]
-train_path = "../data/all/dataset.parquet"
-test_path = "../data/all/dataset.parquet" # Using full dataset for now as split isn't explicit in repo
-validation_path = "../data/all/dataset.parquet"
-sepsis_subset_path = "../data/seperated/seps_true.parquet"
-non_sepsis_subset_path = "../data/seperated/seps_false.parquet"
+train_path = "../data/split/train.parquet"
+output_path = "../results/causal_discovery.json"
 
 [experiment]
 target_column = "SepsisLabel"
 patient_id_column = "Patient_ID"
 time_column = "ICULOS"
-test_size = 0.2
-random_seed = 42
 
 [causality]
-significance_threshold = 0.05
+# mRMR candidates. Time and administrative fields are excluded from the causal-driver run
+# (they cannot cause sepsis) but included in a diagnostic run to show their pull.
+physiological = ["HR", "O2Sat", "Temp", "SBP", "MAP", "DBP", "Resp", "BaseExcess", "HCO3", "FiO2", "pH", "PaCO2", "SaO2", "AST", "BUN", "Alkalinephos", "Calcium", "Chloride", "Creatinine", "Bilirubin_direct", "Glucose", "Lactate", "Magnesium", "Phosphate", "Potassium", "Bilirubin_total", "TroponinI", "Hct", "Hgb", "PTT", "WBC", "Fibrinogen", "Platelets", "Age", "Gender"]
+time_admin = ["ICULOS", "HospAdmTime", "Unit1", "Unit2"]
 max_features = 10
+# SURD on the top physiological mRMR drivers; each binned into tertiles + a 'not yet measured' state.
+surd_sources = 5
+surd_bins = 3

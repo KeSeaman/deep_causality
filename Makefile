@@ -1,20 +1,27 @@
-.PHONY: all build test clean setup-python run-backend
+# Full pipeline: make all   (data/all/dataset.parquet must exist; see notes/data.md)
+PY ?= /usr/bin/python3
+RUN = systemd-inhibit --what=sleep:idle --who=deep-causality --why=pipeline
 
-all: build
+.PHONY: all prepare discover evaluate test test-rust test-python clean
 
-build:
-	cd backend && cargo build --release
+all: prepare discover evaluate
 
-test:
-	cd backend && cargo test
+prepare:
+	$(PY) scripts/prepare_data.py --data data/all/dataset.parquet --out data/split
 
-run-backend:
-	cd backend && cargo run --release
+discover:
+	cd backend && cargo build --release && $(RUN) ../target/release/icu_sepsis_backend --config ../config/default.toml
 
-setup-python:
-	uv venv .venv --python python3.12
-	. .venv/bin/activate && uv pip install -r requirements.txt
+evaluate:
+	$(RUN) $(PY) scripts/evaluate_detection.py --split data/split --discovery results/causal_discovery.json --out results
+
+test: test-rust test-python
+
+test-rust:
+	cargo test -p icu_sepsis_backend --locked
+
+test-python:
+	$(PY) -m pytest -q tests
 
 clean:
-	cd backend && cargo clean
-	rm -rf .venv
+	cargo clean

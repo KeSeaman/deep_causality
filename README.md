@@ -1,313 +1,95 @@
-# 🔬 Deep Causality: ICU Sepsis Early Detection
+# Deep Causality: Causal Drivers and Safety Guardrails for ICU Sepsis Early Warning
 
-> **A Safety Engine for AI That Asks "Why?" Before "What?"**
-
-Stop predicting outcomes blindly. Start understanding **causes**.
-
-[![Rust](https://img.shields.io/badge/Rust-000000?style=flat&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue?style=flat&logo=python&logoColor=white)](https://www.python.org/)
+[![CI](https://github.com/KeSeaman/Deep_Causality/actions/workflows/ci.yml/badge.svg)](https://github.com/KeSeaman/Deep_Causality/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
----
+Can a small set of causally selected physiological drivers warn of sepsis hours before onset, and can explicit guardrails stop the model from answering when the record is too sparse to trust? This project tests both on the PhysioNet 2019 challenge data, training on one hospital and testing on the other.
 
-## 🎯 What is This?
+## Pipeline
 
-This is a **computational causality engine** built on the [DeepCausality](https://github.com/deepcausality-rs/deep_causality) library—designed to predict ICU sepsis not by finding statistical correlations, but by modeling the **causal mechanisms** that produce disease.
+1. **Prepare** (`scripts/prepare_data.py`): hospital A (20,336 patients) for training, hospital B (20,000) for testing; each value carried forward within the ICU stay so every hour uses only past information.
+2. **Causal discovery** (Rust, `backend/`, DeepCausality): mRMR ranks drivers on hospital A only, once with ICU time and administrative fields allowed (a diagnostic) and once restricted to physiological and demographic fields (the causal-driver set: time in ICU cannot cause sepsis). A SURD decomposition then measures what the top five drivers tell us about the label, and how much of it is unique, redundant or synergistic.
+3. **Detector** (`scripts/evaluate_detection.py`): LightGBM on the ten causal drivers, scoring every patient-hour.
+4. **Guardrails**: the Effect Ethos rules (backend/src/ethos) block a prediction when MAP or heart rate is missing (ETHOS-001) or more than half of vitals and labs are missing (ETHOS-002). Each prediction gets an explanation: the guardrail verdict plus the five largest feature contributions (SHAP).
+5. **Evaluation on hospital B** against simpler and richer baselines, with patient-bootstrap 95% confidence intervals.
 
-### The Problem with Standard ML
+## Results (hospital B, 761,995 patient-hours, 5.7% septic stays)
 
-Most ML models on imbalanced medical data (7.27% sepsis prevalence) fail because:
-- They chase **statistical shortcuts** that don't generalize
-- They produce **black-box predictions** clinicians can't trust
-- They **optimize for metrics** (accuracy) while missing actual patients
+![Hourly AUROC by detector](results/detection_auroc.png)
 
-### My Solution: Context-First Causality
+| Detector | Hourly AUROC (95% CI) | Hourly AUPRC | Patient AUROC |
+| --- | --- | --- | --- |
+| ICU length of stay only | 0.628 (0.610–0.644) | 0.048 | 0.519 |
+| SIRS + qSOFA clinical score | 0.661 (0.650–0.674) | 0.028 | 0.670 |
+| **Causal drivers (10 features)** | **0.696 (0.682–0.707)** | 0.039 | 0.722 |
+| mRMR incl. time/admin fields | 0.749 (0.735–0.765) | 0.068 | 0.737 |
+| All features, no time/admin | 0.753 (0.742–0.763) | 0.049 | 0.774 |
+| All features | 0.768 (0.754–0.782) | 0.065 | 0.763 |
 
-| Traditional ML | Deep Causality Approach |
-|----------------|-------------------------|
-| "Patient has 73% sepsis probability" | "Sepsis risk is HIGH because **Lactate > 2.0** triggered **Rule X**, while **MAP < 65** for 2+ hours adds compounding risk" |
-| Feature importance = black box | Full causal trace explaining *why* |
-| Static feature vector | Dynamic patient context (time-indexed) |
-| Optimizes for accuracy | Optimizes for **actionable insight** |
+Hourly labels are positive from 6 hours before clinical onset, so hourly AUROC measures early warning; prevalence is 1.4% of hours.
 
-> 📖 **For full research documentation**, see [`notes/methodology.md`](notes/methodology.md) — includes detailed SURD algorithm, causal graph architecture, and validation approach.
+- **The causal-driver set beats the clinical score but loses about 0.07 AUROC against using every feature.** Restricting the model to ten mRMR-selected drivers buys a shorter explanation at a measurable cost in detection.
+- **ICU length of stay is a label artifact, not a driver.** Alone it reaches 0.63 hourly AUROC, because labels cluster late in long stays, but 0.52 at patient level: it says when, not who. mRMR still ranks it first when allowed, which is why the causal-driver run excludes it.
+- **Alerting** (threshold set for 80% patient specificity on hospital A validation patients): the causal-driver detector flags 34% of septic patients before onset, with 90% specificity and 18% PPV on hospital B. The median lead time of 28 hours (IQR 5–71) is long enough that many early alerts are likely not sepsis-specific. The clinical score flags 56% before onset, but at 69% specificity and 10% PPV.
+- **SURD on hospital A**: the top five drivers (respiratory rate, bicarbonate, temperature, haemoglobin, heart rate) jointly carry 0.0061 of the label's 0.151 bits (4%); 0.0045 bits of that is synergistic and only temperature has any unique information. A single hour's snapshot says little about imminent sepsis; what signal there is lives in combinations.
 
----
+### Guardrails
 
-## 💡 For Data Scientists
+| Reading of the rules | Hours allowed | Labelled-sepsis hours allowed | AUROC on allowed hours | AUROC on blocked hours |
+| --- | --- | --- | --- | --- |
+| Last known value counts as present | 69.9% | 83.8% | 0.708 | 0.627 |
+| Only values measured this hour count | 3.6% | 6.1% | 0.711 | 0.695 |
 
+- Under the last-known reading the guardrails do what they are for: blocked hours are the ones the model handles worst (0.627 vs 0.708). Applied to alerting they raise specificity from 0.896 to 0.908 and lower sensitivity before onset from 0.340 to 0.325.
+- Read literally on hourly data (only values measured this hour), ETHOS-002 blocks 96% of hours, because labs are drawn every few hours. The rule needs the last-known interpretation to be usable.
+- Example explanations, including a blocked hour: [`results/example_reports.md`](results/example_reports.md).
 
-| DeepCausality Concept | DS Equivalent | What It Does |
-|-----------------------|---------------|--------------|
-| **Causaloid** | Feature interaction function | The atomic unit of causality: `Input → Function → Output` with explicit conditions |
-| **Context Hypergraph** | Directed Acyclic Graph (DAG) | A dynamic graph that models each patient as an evolving state |
-| **Effect Ethos** | Guardrails / Constraints | Deontic rules that BLOCK unsafe predictions (e.g., "Never diagnose if key vitals are missing") |
-| **SURD Analysis** | Feature Selection | Identifies **Unique** causal drivers vs **Redundant** noise |
-| **mRMR** | Mutual Information | Minimum Redundancy Maximum Relevance for feature ranking |
+## Reproduce
 
----
-
-## 🏗️ Architecture
-
-```mermaid
-graph TB
-    subgraph "Data Layer"
-        A[PhysioNet 2019 Data] --> B[Polars DataLoader]
-        B --> C[Schema Validation]
-    end
-
-    subgraph "Causal Discovery Engine (Rust)"
-        C --> D[SURD Dual Analysis]
-        D --> E[mRMR Feature Ranking]
-        E --> F[Causaloid Graph Builder]
-    end
-
-    subgraph "Safety Layer"
-        F --> G[Effect Ethos Guardrails]
-        G --> H{Rules Pass?}
-        H -->|Yes| I[Inference Engine]
-        H -->|No| J[Counterfactual Explanation]
-    end
-
-    subgraph "Output"
-        I --> K[Risk Score + Causal Trace]
-        J --> L[Blocked Action + Why]
-    end
-
-    subgraph "Visualization"
-        F --> M[Graphviz DOT Export]
-        M --> N[SVG/PNG Graph]
-    end
-```
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-- **Rust** 1.70+ (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
-- **Python 3.12** (`pyenv install 3.12` or system install)
-- **uv** (optional, for fast Python dependency management)
-
-### 1. Clone & Setup
+Needs the PhysioNet 2019 data as `data/all/dataset.parquet` (see [`notes/data.md`](notes/data.md)), a Rust toolchain and Python 3.14 with `requirements.txt`.
 
 ```bash
-git clone https://github.com/KeSeaman/Deep_Causality.git
-cd Deep_Causality
-
-# Setup Python environment
-make setup-python
-
-# Or manually:
-# uv venv .venv --python python3.12
-# source .venv/bin/activate
-# uv pip install -r requirements.txt
+make all       # prepare -> causal discovery (Rust) -> detector, guardrails, evaluation
+make test      # Rust unit tests + Python pipeline tests
+marimo edit notebooks/results_analysis.py
 ```
 
-### 2. Build the Rust Backend
+Outputs: `results/causal_discovery.json`, `results/detection_results.json`, `results/example_reports.md`, `results/detection_auroc.png`.
 
-```bash
-make build
-# Or: cd backend && cargo build --release
+## Implementation notes
+
+- **DeepCausality's mRMR** does the feature selection. Its SURD function (`surd_states`, commit 6cc7f6f) is not used: it misaligns the target axis when broadcasting, panics on zero cells, and disagrees with the reference SURD implementation by 2e-3 to 9e-3 bits where it runs. `backend/src/causality/surd_aggregate.rs` is a port of the aggregate decomposition, checked against exact cases (XOR = pure synergy, duplicated source = pure redundancy, independent noise = no information) and against a numpy transcription of the reference code ([`scripts/surd_reference.py`](scripts/surd_reference.py)) to within 5e-13 bits.
+- LightGBM trains on CPU: on the Intel Arc iGPU its OpenCL learner was about 2× slower for this workload.
+- The guardrail rules are implemented and unit-tested in Rust; the evaluation applies the same rules in Python (`ethos_allowed`), because the pipeline's modelling stage is Python.
+
+## Limitations
+
+- One dataset, two hospitals, one label definition (the challenge's Sepsis-3-based, 6-hour-shifted label).
+- "Causal drivers" here means selected under a domain prior (no time or administrative fields) and an information-theoretic criterion. Neither establishes causation: clinicians order tests when they suspect sepsis, so measurement itself carries information that is not physiology.
+- The alert threshold was tuned on hospital A; specificity on hospital B came out higher (0.90 vs the 0.80 target), a reminder that operating points move between sites.
+- No prospective or clinician evaluation.
+
+Full design and rationale: [`notes/methodology.md`](notes/methodology.md).
+
+## Project structure
+
+```text
+backend/src/causality/   mRMR (DeepCausality) and SURD decomposition
+backend/src/ethos/       Effect Ethos guardrail rules
+backend/src/main.rs      Causal discovery CLI -> results/causal_discovery.json
+scripts/                 prepare_data.py, evaluate_detection.py, plot_results.py, surd_reference.py
+tests/                   Python pipeline tests
+notebooks/               eda.py, results_analysis.py (marimo)
+config/default.toml      Candidates, mRMR size, SURD sources and bins
+results/                 All reported numbers
 ```
 
-### 3. Run Causal Discovery
+## Acknowledgments
 
-```bash
-# Basic mRMR feature selection
-make run-backend
+- [DeepCausality](https://github.com/deepcausality-rs/deep_causality) (mRMR, tensors)
+- [PhysioNet/Computing in Cardiology Challenge 2019](https://physionet.org/content/challenge-2019/): Reyna et al., *Critical Care Medicine* 48(2), 2020
+- Martínez-Sánchez, Arranz & Lozano-Durán, "Decomposing causality into its synergistic, unique, and redundant components", *Nature Communications* 15, 2024 (SURD)
 
-# With SURD dual analysis (Sepsis vs Non-Sepsis)
-cd backend && cargo run --release -- --surd-analysis
+## License
 
-# Export causal graph visualization
-cd backend && cargo run --release -- --export-graph ../notes/causal_graph.dot
-```
-
-
-
-### 4. Python Bindings
-
-```bash
-cd python
-pip install maturin
-maturin develop
-
-# Then in Python:
-import deep_causality
-features = deep_causality.run_mrmr_polars(df, target="SepsisLabel")
-```
-
-### 5. Analyze Results
-
-```bash
-source .venv/bin/activate
-marimo edit notebooks/eda.py  # Exploratory Data Analysis
-marimo edit notebooks/results_analysis.py  # Visualize causal drivers
-```
-
----
-
-## 📊 Results Summary
-
-Our causal analysis revealed distinct biomarkers for sepsis that traditional correlation-based methods miss.
-
--   **Top Driver**: `ICULOS` (Length of Stay) followed by `HospAdmTime`.
--   **Sepsis Signature**: `Lactate`, `Bilirubin_direct`, and `FiO2` emerged as unique causal drivers for sepsis, distinct from general ICU sickness.
--   **Uniqueness**: The sepsis feature set contained **71% more unique information** than the non-sepsis set, validating the "Context-First" hypothesis.
-
-> 📖 **Full Analysis**: For detailed mRMR rankings, SURD bit-score tables, and causal graph visualizations, see [`notes/methodology.md`](notes/methodology.md).
-
-
----
-
-## 🛡️ AI Safety & Governance (Effect Ethos)
-
-### The Killer Feature: Compliance Guardrails
-
-The **Effect Ethos** module acts as a governance layer that **blocks unsafe AI actions**:
-
-```rust
-// Example: Never predict if critical data is missing
-let guard = EthosGuard::clinical_default();
-let result = guard.check(&patient_data, prediction);
-
-match result {
-    EthosResult::Blocked(explanation) => {
-        // explanation.rule_violated: "Missing critical vital signs: [MAP, HR]"
-        // explanation.counterfactual: "If MAP, HR were available, prediction would proceed"
-    },
-    EthosResult::Allowed(pred) => {
-        // Safe to use prediction
-    }
-}
-```
-
-### Built-In Rules
-
-| Rule ID | Description | Severity |
-|---------|-------------|----------|
-| ETHOS-001 | Require critical vital signs (MAP, HR) | 8/10 |
-| ETHOS-002 | Block if >50% data is missing | 7/10 |
-
-### Why This Matters
-
-| Scenario | Without Ethos | With Effect Ethos |
-|----------|---------------|-------------------|
-| Missing vital signs | Model guesses | ❌ Blocked + Explanation |
-| Contradictory inputs | Undefined behavior | ⚠️ Flagged for review |
-| Edge cases | Silent failure | 📋 Audit trail generated |
-
-> **Enterprise Value**: This is **EU AI Act compliance** and **FDA AI/ML guidance** in code.
-
----
-
-## 📈 Visualization
-
-### Causal Graph Output
-
-![Causal Graph showing feature relationships to SepsisLabel](notes/causal_graph.png)
-
-Export causal graphs to Graphviz DOT format:
-
-```bash
-cargo run --release -- --export-graph output.dot
-dot -Tsvg output.dot -o causal_graph.svg
-```
-
-The generated graph shows:
-- **Blue boxes**: Feature nodes with mRMR scores
-- **Red oval**: Target variable (SepsisLabel)
-- **Green edges**: Causal influence (thicker = stronger)
-
----
-
-## 📁 Project Structure
-
-```
-Deep_Causality/
-├── backend/                 # Rust causal engine
-│   └── src/
-│       ├── causality/       # mRMR & SURD algorithms
-│       ├── context/         # Dynamic patient hypergraph
-│       ├── ethos/           # Effect Ethos guardrails ⭐
-│       ├── visualization/   # Graphviz export ⭐
-│       ├── config/          # TOML config loader
-│       ├── data/            # Parquet/CSV loading
-│       └── utils/           # Tensor adapters
-├── python/                  # PyO3 Python bindings ⭐
-│   ├── Cargo.toml
-│   ├── pyproject.toml
-│   └── src/lib.rs
-├── notebooks/               # Python Marimo notebooks
-│   ├── eda.py
-│   └── results_analysis.py
-├── data/                    # PhysioNet 2019 dataset
-├── config/                  # Experiment configuration
-├── scripts/                 # Setup & automation
-├── notes/                   # Results & documentation
-│   └── methodology.md       # 📖 Detailed methodology & research design
-├── Makefile
-└── README.md
-```
-
-
-## 🔧 CLI Reference
-
-```bash
-# Basic usage
-cargo run --release -- [OPTIONS]
-
-# Options:
-  -c, --config <PATH>      Config file path [default: ../config/default.toml]
-      --surd-analysis      Run SURD dual analysis
-      --export-graph <PATH> Export causal graph to DOT file  
-      --export-json <PATH> Export results to JSON
-  -h, --help               Print help
-  -V, --version            Print version
-```
-
----
-
-## 📚 Key Concepts
-
-### Causaloid: The Atomic Unit of Causality
-
-```
-Input → Causal Function → Output
-```
-
-Unlike a neural network node, a **Causaloid** is:
-- **Composable**: Chain them into graphs
-- **Explainable**: Every step is traceable
-- **Testable**: Each unit has explicit conditions
-
-### Context ≠ Static Storage
-
-In real causality, **context itself can be causal**:
-- Temperature (context) → Sensor failure (event)
-- Previous treatment (context) → Drug interaction (event)
-
-Our Context Hypergraph allows context nodes to **trigger Causaloids**, modeling recursive causal relationships.
-
----
-
-## 📄 License
-
-MIT License. See [LICENSE](LICENSE) for details.
-
----
-
-## 🙏 Acknowledgments
-
-- [DeepCausality](https://github.com/deepcausality-rs/deep_causality) for the Rust causality framework
-- [PhysioNet Computing in Cardiology Challenge 2019](https://physionet.org/content/challenge-2019/) for the sepsis dataset
-- [Marimo](https://marimo.io/) for reactive Python notebooks
-
----
-
-<div align="center">
-
-**Built with Rust. Explained with Causality. Safe by Design.**
-
-</div>
+MIT

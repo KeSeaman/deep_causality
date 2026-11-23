@@ -1,9 +1,8 @@
-marimo
-polars
-pyarrow
-matplotlib
-seaborn
-numpy
-modin[all]
-ray[default]
-scikit-learn
+# Runs on the system interpreter (Python 3.14): /usr/bin/python3 -m pip install -r requirements.txt
+polars>=1.30
+numpy>=2.0
+lightgbm>=4.5
+scikit-learn>=1.5
+marimo>=0.20
+matplotlib>=3.9
+pytest>=8

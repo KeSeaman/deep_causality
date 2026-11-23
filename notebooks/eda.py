@@ -1,58 +1,43 @@
 import marimo
 
-__generated_with = "0.1.0"
-app = marimo.App()
+__generated_with = "0.25.0"
+app = marimo.App(width="medium")
 
 
 @app.cell
-def __():
+def _():
+    from pathlib import Path
+
+    import marimo as mo
     import polars as pl
-    import modin.pandas as pd
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    import numpy as np
-    import os
-    
-    # Initialize Ray for Modin if needed (Modin usually handles this, but good to be explicit if needed)
-    # import ray
-    # ray.init()
-    return np, os, pd, pl, plt, sns
+
+    path = Path(__file__).resolve().parents[1] / "data" / "all" / "dataset.parquet"
+    df = pl.read_parquet(path)
+    return df, mo, pl
 
 
 @app.cell
-def __(pd, os):
-    # Load data
-    # Note: Replace with actual path after data download
-    data_path = "../data/train.parquet"
-    if os.path.exists(data_path):
-        try:
-            # Modin read_parquet
-            df = pd.read_parquet(data_path)
-            print("Data loaded successfully with Modin")
-        except Exception as e:
-            print(f"Error loading data: {e}")
-            df = None
-    else:
-        print(f"Data file not found at {data_path}")
-        df = None
-    return df,
-
-
-@app.cell
-def __(df, plt, sns):
-    if df is not None:
-        # Sepsis Distribution
-        plt.figure(figsize=(10, 6))
-        sns.countplot(x="SepsisLabel", data=df)
-        plt.title("Distribution of Sepsis Labels")
-        plt.show()
+def _(df, mo, pl):
+    patients = df.group_by("Patient_ID").agg(pl.col("SepsisLabel").max())
+    mo.md(
+        f"**{df.height:,} patient-hours, {patients.height:,} patients.** "
+        f"Hourly label prevalence {df['SepsisLabel'].mean():.2%}; septic stays {patients['SepsisLabel'].mean():.2%}. "
+        f"Hospital A: {df.filter(pl.col('Patient_ID') < 100_000)['Patient_ID'].n_unique():,} patients; "
+        f"hospital B: {df.filter(pl.col('Patient_ID') >= 100_000)['Patient_ID'].n_unique():,}."
+    )
     return
 
 
 @app.cell
-def __(df):
-    if df is not None:
-        print(df.describe())
+def _(df, pl):
+    # Share of hours with each variable measured: labs are sparse, which is why the
+    # guardrails and the "not yet measured" SURD state matter.
+    (
+        df.drop("Patient_ID", "SepsisLabel", "Hour")
+        .select(pl.all().is_not_null().mean())
+        .unpivot(variable_name="variable", value_name="share_measured")
+        .sort("share_measured", descending=True)
+    )
     return
 
 

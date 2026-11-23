@@ -20,7 +20,9 @@ The dataset contains 40+ variables including:
 
 ## Data Quality & Handling
 - **Missingness**: High frequency of missing values (common in ICU data).
-- **Strategy**:
-    - Do NOT simply drop rows.
-    - Use `MaybeUncertain<T>` types in DeepCausality to explicitly model missing data as a state of uncertainty.
-    - Use relative time indexing to normalize patient trajectories.
+- **Strategy** (scripts/prepare_data.py):
+    - Rows are never dropped.
+    - Within each ICU stay, every vital and lab is carried forward from its last measurement, so features at hour t use only information available at hour t.
+    - A per-variable flag records whether the value was measured in that hour; the guardrails use it.
+    - For SURD, each source gets an explicit "not yet measured" state alongside its tertile bins.
+- **Expected location**: `data/all/dataset.parquet` (the challenge's per-patient files combined, with a `Patient_ID` column; IDs below 100,000 are hospital A, the rest hospital B).

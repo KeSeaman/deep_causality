@@ -1,0 +1,346 @@
+{
+  "split": "hospital A (train) -> hospital B (test)",
+  "device": "cpu",
+  "train_patients": 20336,
+  "test_patients": 20000,
+  "test_hours": 761995,
+  "test_hourly_prevalence": 0.014147074455869133,
+  "test_patient_prevalence": 0.0571,
+  "target_patient_specificity_on_validation": 0.8,
+  "results": [
+    {
+      "model": "iculos_only",
+      "features": [
+        "ICULOS"
+      ],
+      "hourly_auroc": 0.6279868314629004,
+      "hourly_auroc_ci": [
+        0.6096659333573117,
+        0.6441623857748384
+      ],
+      "hourly_auprc": 0.04767446531054775,
+      "hourly_auprc_ci": [
+        0.042895137705062425,
+        0.05362902557450336
+      ],
+      "patient_auroc": 0.518566332878835,
+      "patient_auroc_ci": [
+        0.49504233625015676,
+        0.537496581606558
+      ],
+      "train_seconds": 0.0,
+      "rounds": 0
+    },
+    {
+      "model": "clinical_score",
+      "features": [
+        "HR",
+        "Temp",
+        "Resp",
+        "PaCO2",
+        "WBC",
+        "SBP"
+      ],
+      "hourly_auroc": 0.6611989571328585,
+      "hourly_auroc_ci": [
+        0.6501204494849085,
+        0.6743104013866865
+      ],
+      "hourly_auprc": 0.028325011376676607,
+      "hourly_auprc_ci": [
+        0.025775985796198535,
+        0.0315468760250597
+      ],
+      "patient_auroc": 0.6696865169292707,
+      "patient_auroc_ci": [
+        0.6526214968071485,
+        0.6864599435382468
+      ],
+      "train_seconds": 0.0,
+      "rounds": 0
+    },
+    {
+      "model": "causal_drivers",
+      "features": [
+        "Resp",
+        "HCO3",
+        "Temp",
+        "Hgb",
+        "HR",
+        "BUN",
+        "WBC",
+        "Fibrinogen",
+        "Glucose",
+        "Creatinine"
+      ],
+      "hourly_auroc": 0.6956023820878328,
+      "hourly_auroc_ci": [
+        0.6820256067459466,
+        0.7074198944753621
+      ],
+      "hourly_auprc": 0.03864973435245464,
+      "hourly_auprc_ci": [
+        0.034855672133944214,
+        0.04358949613419675
+      ],
+      "patient_auroc": 0.7215718488940945,
+      "patient_auroc_ci": [
+        0.704828436887617,
+        0.7363201639463662
+      ],
+      "train_seconds": 4.814610472999448,
+      "rounds": 97
+    },
+    {
+      "model": "mrmr_with_time_admin",
+      "features": [
+        "ICULOS",
+        "HR",
+        "Unit1",
+        "HospAdmTime",
+        "Resp",
+        "Temp",
+        "BUN",
+        "Unit2",
+        "Hgb",
+        "WBC"
+      ],
+      "hourly_auroc": 0.7493873425977561,
+      "hourly_auroc_ci": [
+        0.7348521283320144,
+        0.7649447065469642
+      ],
+      "hourly_auprc": 0.06839905959928848,
+      "hourly_auprc_ci": [
+        0.06012773381374717,
+        0.07630209486212022
+      ],
+      "patient_auroc": 0.7374506613070418,
+      "patient_auroc_ci": [
+        0.7176899825667303,
+        0.7530229646671881
+      ],
+      "train_seconds": 2.7684343989994886,
+      "rounds": 45
+    },
+    {
+      "model": "all_features",
+      "features": [
+        "HR",
+        "O2Sat",
+        "Temp",
+        "SBP",
+        "MAP",
+        "DBP",
+        "Resp",
+        "BaseExcess",
+        "HCO3",
+        "FiO2",
+        "pH",
+        "PaCO2",
+        "SaO2",
+        "AST",
+        "BUN",
+        "Alkalinephos",
+        "Calcium",
+        "Chloride",
+        "Creatinine",
+        "Bilirubin_direct",
+        "Glucose",
+        "Lactate",
+        "Magnesium",
+        "Phosphate",
+        "Potassium",
+        "Bilirubin_total",
+        "TroponinI",
+        "Hct",
+        "Hgb",
+        "PTT",
+        "WBC",
+        "Fibrinogen",
+        "Platelets",
+        "Age",
+        "Gender",
+        "Unit1",
+        "Unit2",
+        "HospAdmTime",
+        "ICULOS"
+      ],
+      "hourly_auroc": 0.7676162656694053,
+      "hourly_auroc_ci": [
+        0.7543343233871037,
+        0.7820782445324514
+      ],
+      "hourly_auprc": 0.06521182024045592,
+      "hourly_auprc_ci": [
+        0.05886659913220043,
+        0.07316273558540717
+      ],
+      "patient_auroc": 0.7626718321963448,
+      "patient_auroc_ci": [
+        0.7444483121715814,
+        0.778794716999175
+      ],
+      "train_seconds": 6.730763869000839,
+      "rounds": 131
+    },
+    {
+      "model": "all_minus_time_admin",
+      "features": [
+        "HR",
+        "O2Sat",
+        "Temp",
+        "SBP",
+        "MAP",
+        "DBP",
+        "Resp",
+        "BaseExcess",
+        "HCO3",
+        "FiO2",
+        "pH",
+        "PaCO2",
+        "SaO2",
+        "AST",
+        "BUN",
+        "Alkalinephos",
+        "Calcium",
+        "Chloride",
+        "Creatinine",
+        "Bilirubin_direct",
+        "Glucose",
+        "Lactate",
+        "Magnesium",
+        "Phosphate",
+        "Potassium",
+        "Bilirubin_total",
+        "TroponinI",
+        "Hct",
+        "Hgb",
+        "PTT",
+        "WBC",
+        "Fibrinogen",
+        "Platelets",
+        "Age",
+        "Gender"
+      ],
+      "hourly_auroc": 0.7528832795509494,
+      "hourly_auroc_ci": [
+        0.7415326305707388,
+        0.7630046035581024
+      ],
+      "hourly_auprc": 0.048558510609734325,
+      "hourly_auprc_ci": [
+        0.04295611649186983,
+        0.054432083568617916
+      ],
+      "patient_auroc": 0.7743601873639825,
+      "patient_auroc_ci": [
+        0.7623670187989238,
+        0.7864327947317107
+      ],
+      "train_seconds": 5.05788606599981,
+      "rounds": 82
+    }
+  ],
+  "alerting": {
+    "causal_drivers": {
+      "threshold": 0.059966585182236555,
+      "patient_sensitivity_any_time": 0.37215411558669004,
+      "patient_sensitivity_before_onset": 0.3397548161120841,
+      "patient_specificity": 0.8958532187930852,
+      "patient_ppv": 0.17789870238593553,
+      "median_lead_hours_when_early": 28.0,
+      "lead_hours_iqr_when_early": [
+        5.0,
+        71.25
+      ]
+    },
+    "all_features": {
+      "threshold": 0.04738501973386786,
+      "patient_sensitivity_any_time": 0.5026269702276708,
+      "patient_sensitivity_before_onset": 0.4754816112084063,
+      "patient_specificity": 0.8922473220914201,
+      "patient_ppv": 0.2202609363008442,
+      "median_lead_hours_when_early": 39.0,
+      "lead_hours_iqr_when_early": [
+        13.0,
+        85.5
+      ]
+    },
+    "all_minus_time_admin": {
+      "threshold": 0.05295420094362515,
+      "patient_sensitivity_any_time": 0.4413309982486865,
+      "patient_sensitivity_before_onset": 0.4010507880910683,
+      "patient_specificity": 0.892141266306077,
+      "patient_ppv": 0.19858156028368795,
+      "median_lead_hours_when_early": 32.5,
+      "lead_hours_iqr_when_early": [
+        5.0,
+        79.75
+      ]
+    },
+    "clinical_score": {
+      "threshold": 4.0,
+      "patient_sensitivity_any_time": 0.5866900175131349,
+      "patient_sensitivity_before_onset": 0.5577933450087565,
+      "patient_specificity": 0.689256548944745,
+      "patient_ppv": 0.10260336906584992,
+      "median_lead_hours_when_early": 29.0,
+      "lead_hours_iqr_when_early": [
+        9.0,
+        75.0
+      ]
+    }
+  },
+  "guardrails_causal_drivers": {
+    "last_known": {
+      "hours_allowed": 0.6993392345094128,
+      "septic_label_hours_allowed": 0.8384972170686457,
+      "hourly_auroc_allowed": 0.7078860479631057,
+      "hourly_auroc_blocked": 0.6273149651122373,
+      "alerting_with_guardrails": {
+        "threshold": 0.059966585182236555,
+        "patient_sensitivity_any_time": 0.35901926444833626,
+        "patient_sensitivity_before_onset": 0.3248686514886165,
+        "patient_specificity": 0.9080496341075406,
+        "patient_ppv": 0.1912313432835821,
+        "median_lead_hours_when_early": 28.0,
+        "lead_hours_iqr_when_early": [
+          5.0,
+          73.0
+        ]
+      }
+    },
+    "this_hour": {
+      "hours_allowed": 0.0355172934205605,
+      "septic_label_hours_allowed": 0.06085343228200371,
+      "hourly_auroc_allowed": 0.7111860619657014,
+      "hourly_auroc_blocked": 0.6945172710146443,
+      "alerting_with_guardrails": {
+        "threshold": 0.059966585182236555,
+        "patient_sensitivity_any_time": 0.1725043782837128,
+        "patient_sensitivity_before_onset": 0.15411558669001751,
+        "patient_specificity": 0.9706755753526355,
+        "patient_ppv": 0.26266666666666666,
+        "median_lead_hours_when_early": 25.0,
+        "lead_hours_iqr_when_early": [
+          4.0,
+          65.0
+        ]
+      }
+    }
+  },
+  "lightgbm": {
+    "version": "4.7.0",
+    "objective": "binary",
+    "learning_rate": 0.05,
+    "num_leaves": 63,
+    "min_data_in_leaf": 200,
+    "feature_fraction": 0.8,
+    "bagging_fraction": 0.8,
+    "bagging_freq": 1,
+    "metric": "auc",
+    "verbose": -1,
+    "seed": 0
+  }
+}

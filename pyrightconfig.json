@@ -1,11 +1,6 @@
 {
-  "venvPath": ".",
-  "venv": ".venv",
-  "pythonVersion": "3.12",
+  "pythonVersion": "3.14",
   "typeCheckingMode": "basic",
   "reportMissingImports": true,
-  "stubPath": "typings",
-  "extraPaths": [
-    "python/python"
-  ]
+  "extraPaths": ["scripts"]
 }
