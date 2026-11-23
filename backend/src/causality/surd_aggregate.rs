@@ -6,7 +6,7 @@
 //! 0.110 bits reported vs 0.192 bits mutual information), files unique information as redundant
 //! when another source has zero specific information (it skips zero increments before updating
 //! the redundant set), fails with `ShapeMismatch` when target and source state counts differ, and
-//! panics when a source state never occurs. This port agrees with a numpy transcription of the
+//! panics when a source state never occurs (reported upstream: https://github.com/deepcausality-rs/deep_causality/issues/878). This port agrees with a numpy transcription of the
 //! reference code (scripts/surd_reference.py) to within 5e-13 bits (see
 //! `tests::dump_for_reference`).
 

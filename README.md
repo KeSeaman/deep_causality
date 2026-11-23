@@ -42,7 +42,7 @@ Hourly labels are positive from 6 hours before clinical onset, so hourly AUROC m
 | Last known value counts as present | 69.9% | 83.8% | 0.708 | 0.627 |
 | Only values measured this hour count | 3.6% | 6.1% | 0.711 | 0.695 |
 
-- Under the last-known reading the guardrails do what they are for: blocked hours are the ones the model handles worst (0.627 vs 0.708). Applied to alerting they raise specificity from 0.896 to 0.908 and lower sensitivity before onset from 0.340 to 0.325.
+- Under the last-known reading the guardrails do what they are for: the model is weaker on blocked hours on average (AUROC 0.627 vs 0.708 on allowed hours), at the cost of blocking 16% of labelled-sepsis hours. The rules do not single out the worst predictions; they remove a set that is worse on average. Applied to alerting they raise specificity from 0.896 to 0.908 and lower sensitivity before onset from 0.340 to 0.325.
 - Read literally on hourly data (only values measured this hour), ETHOS-002 blocks 96% of hours, because labs are drawn every few hours. The rule needs the last-known interpretation to be usable.
 - Example explanations, including a blocked hour: [`results/example_reports.md`](results/example_reports.md).
 
@@ -60,7 +60,7 @@ Outputs: `results/causal_discovery.json`, `results/detection_results.json`, `res
 
 ## Implementation notes
 
-- **DeepCausality's mRMR** does the feature selection. Its SURD function (`surd_states`, commit 6cc7f6f) is not used: it returns wrong values when the target distribution is not uniform (for a single source with p(T) = (0.7, 0.3) it reports 0.110 bits where the mutual information is 0.192), files unique information as redundant when another source carries zero specific information, fails with `ShapeMismatch` when target and source state counts differ, and panics when a source state never occurs. `backend/src/causality/surd_aggregate.rs` is a port of the aggregate decomposition, checked against exact cases (XOR = pure synergy, duplicated source = pure redundancy, independent noise = no information) and against a numpy transcription of the reference code ([`scripts/surd_reference.py`](scripts/surd_reference.py)) to within 5e-13 bits.
+- **DeepCausality's mRMR** does the feature selection. Its SURD function (`surd_states`, commit 6cc7f6f) is not used: it returns wrong values when the target distribution is not uniform (for a single source with p(T) = (0.7, 0.3) it reports 0.110 bits where the mutual information is 0.192), files unique information as redundant when another source carries zero specific information, fails with `ShapeMismatch` when target and source state counts differ, and panics when a source state never occurs. The same defects are reported upstream for release 0.5.4 in [deep_causality#878](https://github.com/deepcausality-rs/deep_causality/issues/878). `backend/src/causality/surd_aggregate.rs` is a port of the aggregate decomposition, checked against exact cases (XOR = pure synergy, duplicated source = pure redundancy, independent noise = no information) and against a numpy transcription of the reference code ([`scripts/surd_reference.py`](scripts/surd_reference.py)) to within 5e-13 bits.
 - LightGBM trains on CPU: on the Intel Arc iGPU its OpenCL learner was about 2× slower for this workload.
 - The guardrail rules are implemented and unit-tested in Rust; the evaluation applies the same rules in Python (`ethos_allowed`), because the pipeline's modelling stage is Python.
 
