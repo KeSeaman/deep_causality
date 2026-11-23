@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Backend crate only: the PyO3 bindings crate (python/) pins pyo3 0.20,
+      # which does not build against current Python. Data files are not in git,
+      # so only unit tests run here.
+      - name: Run backend unit tests
+        run: cargo test -p icu_sepsis_backend --locked
